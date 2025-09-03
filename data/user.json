@@ -96,4 +96,11 @@
   "os" : null,
   "device" : null,
   "timestamp" : "Wed Sep 03 17:11:34 IST 2025"
+}, {
+  "username" : "XYZ",
+  "ip" : "127.0.0.1",
+  "browser" : "insomnia/9.3.2",
+  "os" : null,
+  "device" : null,
+  "timestamp" : "Wed Sep 03 22:38:07 IST 2025"
 } ]
