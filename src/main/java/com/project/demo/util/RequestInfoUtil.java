@@ -1,6 +1,8 @@
 package com.project.demo.util;
 
 import jakarta.servlet.http.HttpServletRequest;
+
+import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -33,7 +35,7 @@ public class RequestInfoUtil {
         loginInfo.put("browser", browser != null ? browser : parseUserAgent(userAgent));
         loginInfo.put("os", os);
         loginInfo.put("device", device);
-        loginInfo.put("timestamp", System.currentTimeMillis());
+        loginInfo.put("timestamp", new Date().toString());
 
         return loginInfo;
     }
