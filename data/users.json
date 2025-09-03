@@ -61,4 +61,25 @@
   "accountNonExpired" : true,
   "credentialsNonExpired" : true,
   "accountNonLocked" : true
+}, {
+  "username" : "integration_7625964a",
+  "password" : "$2a$10$M0ZX75Njb0ASFxBbVuZJFOD/mQHeysl3wAMk6sqPq.Z5Mj3xnOjhW",
+  "enabled" : true,
+  "accountNonExpired" : true,
+  "credentialsNonExpired" : true,
+  "accountNonLocked" : true
+}, {
+  "username" : "integration_dd1fcbfc",
+  "password" : "$2a$10$kF0ECmhqVDqt6NeT5P4SeuXoDWbb7F/dUYBdgBhxlOceaXHDZfWHe",
+  "enabled" : true,
+  "accountNonExpired" : true,
+  "credentialsNonExpired" : true,
+  "accountNonLocked" : true
+}, {
+  "username" : "integration_402eb631",
+  "password" : "$2a$10$vnZFLnpvX0X9/5O0SMxurO0bBvYLVLZVpNkVuaKgDHd4ofREO/7lC",
+  "enabled" : true,
+  "accountNonExpired" : true,
+  "credentialsNonExpired" : true,
+  "accountNonLocked" : true
 } ]
