@@ -12,7 +12,6 @@ public class HelloController {
 
     @GetMapping("/hello")
     public String hello(Principal principal) {
-        // Principal will be null if the user is not authenticated
         return "Hello, " + principal.getName() + "! This is a protected resource.";
     }
 }
