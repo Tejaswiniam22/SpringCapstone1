@@ -8,7 +8,6 @@ public class RefreshToken {
     private String username;
     private Instant expiryDate;
 
-    // Getters and Setters
     public String getToken() {
         return token;
     }

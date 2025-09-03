@@ -54,4 +54,11 @@
   "accountNonExpired" : true,
   "credentialsNonExpired" : true,
   "accountNonLocked" : true
+}, {
+  "username" : "Rahul R",
+  "password" : "$2a$10$KzKr98A244aRxi7fjjzDR.h/HmJ944tBBGRhE3ncacvidpe/P6NFO",
+  "enabled" : true,
+  "accountNonExpired" : true,
+  "credentialsNonExpired" : true,
+  "accountNonLocked" : true
 } ]

@@ -22,179 +22,97 @@ import java.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.project.demo.dto.request.LoginRequest;
+import com.project.demo.dto.request.RegisterRequest;
+import com.project.demo.dto.response.ApiResponse;
+import com.project.demo.dto.response.AuthResponse;
+import com.project.demo.service.AuthService;
+import com.project.demo.service.LoginAuditService;
+import com.project.demo.util.CookieUtil;
+import com.project.demo.util.RequestInfoUtil;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+
 @RestController
 @RequestMapping("/auth")
 public class AuthController {
 
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
 
-    private final UserService userService;
-    private final JwtUtil jwtUtil;
-    private final AuthenticationManager authenticationManager;
-    private final RefreshTokenService refreshTokenService;
+    private final AuthService authService;
+    private final LoginAuditService loginAuditService;
 
-    public AuthController(UserService userService, JwtUtil jwtUtil,
-                          AuthenticationManager authenticationManager,
-                          RefreshTokenService refreshTokenService) {
-        this.userService = userService;
-        this.jwtUtil = jwtUtil;
-        this.authenticationManager = authenticationManager;
-        this.refreshTokenService = refreshTokenService;
+    public AuthController(AuthService authService, LoginAuditService loginAuditService) {
+        this.authService = authService;
+        this.loginAuditService = loginAuditService;
     }
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody User user) {
-        try {
-            log.info("Register attempt for user: {}", user.getUsername());
-            String message = userService.register(user);
-            log.info("User registered successfully: {}", user.getUsername());
-            return ResponseEntity.ok(Map.of("message", message));
-        } catch (IllegalStateException e) {
-            log.warn("Registration failed for user {}: {}", user.getUsername(), e.getMessage());
-            return ResponseEntity.status(400).body(Map.of("error", e.getMessage()));
-        }
+    public ResponseEntity<ApiResponse<Void>> register(@Valid @RequestBody RegisterRequest request) {
+        log.info("Registration attempt for user: {}", request.getUsername());
+
+        String message = authService.register(request);
+        log.info("User registered successfully: {}", request.getUsername());
+
+        return ResponseEntity.ok(ApiResponse.success(message));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody Map<String, String> req,
-                                   HttpServletRequest request,
-                                   HttpServletResponse response) {
-        String username = req.get("username");
-        try {
-            log.info("Login attempt for user: {}", username);
+    public ResponseEntity<ApiResponse<AuthResponse>> login(
+            @Valid @RequestBody LoginRequest request,
+            HttpServletRequest httpRequest,
+            HttpServletResponse response) {
 
-            Authentication authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(username, req.get("password"))
-            );
+        log.info("Login attempt for user: {}", request.getUsername());
 
-            String accessToken = jwtUtil.generateToken(authentication.getName());
-            RefreshToken refreshToken = refreshTokenService.createRefreshToken(authentication.getName());
+        AuthResponse authResponse = authService.login(request);
+        CookieUtil.addRefreshTokenCookie(response, authResponse.getRefreshToken());
 
-            Cookie refreshTokenCookie = new Cookie("refreshToken", refreshToken.getToken());
-            refreshTokenCookie.setHttpOnly(true);
-            refreshTokenCookie.setSecure(false);
-            refreshTokenCookie.setPath("/");
-            refreshTokenCookie.setMaxAge(604800);
-            response.addCookie(refreshTokenCookie);
+        // Log login information
+        Map<String, Object> loginInfo = RequestInfoUtil.extractLoginInfo(
+                request.getUsername(), httpRequest);
+        loginAuditService.saveLoginLog(loginInfo);
 
-            // Collect login details
-            Map<String, Object> logEntry = createLoginLog(username, request);
+        log.info("Login successful for user: {} | IP: {}",
+                request.getUsername(), loginInfo.get("ip"));
 
-            // Save to JSON file
-            saveLoginLog(logEntry);
-
-            log.info("Login successful for user: {} | IP: {} | Browser: {} | Device: {}",
-                    username, logEntry.get("ip"), logEntry.get("browser"), logEntry.get("device"));
-
-            return ResponseEntity.ok(Map.of("accessToken", accessToken, "refreshToken", refreshToken.getToken()));
-        } catch (BadCredentialsException e) {
-            log.warn("Login failed for user {}: Invalid credentials", username);
-            return ResponseEntity.status(401).body(Map.of("error", "Invalid username or password"));
-        } catch (Exception e) {
-            log.error("Unexpected error during login for user {}: {}", username, e.getMessage(), e);
-            return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
-        }
+        return ResponseEntity.ok(ApiResponse.success("Login successful", authResponse));
     }
 
-    private Map<String, Object> createLoginLog(String username, HttpServletRequest request) {
-        String ipAddress = request.getRemoteAddr();
-        String userAgent = request.getHeader("User-Agent");
-        String browser = request.getHeader("X-Browser");
-        String os = request.getHeader("X-OS");
-        String device = request.getHeader("X-Device");
+    @PostMapping("/refresh")
+    public ResponseEntity<ApiResponse<AuthResponse>> refreshToken(
+            HttpServletRequest request, HttpServletResponse response) {
 
-        Map<String, Object> logEntry = new LinkedHashMap<>();
-        logEntry.put("username", username);
-        logEntry.put("ip", ipAddress);
-        logEntry.put("browser", browser != null ? browser : userAgent);
-        logEntry.put("os", os);
-        logEntry.put("device", device);
-        logEntry.put("timestamp", new Date().toString());
-        return logEntry;
-    }
+        String refreshToken = CookieUtil.getRefreshTokenFromCookies(request)
+                .orElseThrow(() -> new RuntimeException("Refresh token not found"));
 
-    private void saveLoginLog(Map<String, Object> logEntry) {
-        try {
-            File file = new File("data/user.json");
-            ObjectMapper mapper = new ObjectMapper();
-            List<Map<String, Object>> logs;
+        AuthResponse authResponse = authService.refreshToken(refreshToken);
+        CookieUtil.addRefreshTokenCookie(response, authResponse.getRefreshToken());
 
-            if (file.exists() && file.length() > 0L) {
-                logs = mapper.readValue(file, new TypeReference<>() {});
-            } else {
-                logs = new ArrayList<>();
-            }
-
-            logs.add(logEntry);
-            mapper.writerWithDefaultPrettyPrinter().writeValue(file, logs);
-            log.info("Login log saved to JSON for user: {}", logEntry.get("username"));
-        } catch (Exception e) {
-            log.error("Failed to save login log to JSON: {}", e.getMessage(), e);
-        }
-    }
-
-    @PostMapping("/refreshtoken")
-    public ResponseEntity<?> refreshToken(HttpServletRequest request, HttpServletResponse response) {
-        Optional<String> refreshTokenOpt = Optional.ofNullable(request.getCookies())
-                .flatMap(cookies -> Arrays.stream(cookies)
-                        .filter(c -> "refreshToken".equals(c.getName()))
-                        .map(Cookie::getValue)
-                        .findFirst());
-
-        if (refreshTokenOpt.isEmpty()) {
-            log.warn("Refresh token not found in cookies");
-            return ResponseEntity.status(401).body(Map.of("error", "Refresh token not found in cookie"));
-        }
-
-        String oldToken = refreshTokenOpt.get();
-
-        return refreshTokenService.findByToken(oldToken)
-                .map(refreshTokenService::verifyExpiration)
-                .map(rt -> {
-                    String username = rt.getUsername();
-                    refreshTokenService.deleteByToken(oldToken);
-
-                    String newAccessToken = jwtUtil.generateToken(username);
-                    RefreshToken newRefreshToken = refreshTokenService.createRefreshToken(username);
-
-                    Cookie newRefreshTokenCookie = new Cookie("refreshToken", newRefreshToken.getToken());
-                    newRefreshTokenCookie.setHttpOnly(true);
-                    newRefreshTokenCookie.setSecure(false);
-                    newRefreshTokenCookie.setPath("/");
-                    newRefreshTokenCookie.setMaxAge(7 * 24 * 60 * 60);
-                    response.addCookie(newRefreshTokenCookie);
-
-                    log.info("Refresh token rotated successfully for user: {}", username);
-                    return ResponseEntity.ok(Map.of(
-                            "accessToken", newAccessToken,
-                            "refreshToken", newRefreshToken.getToken()
-                    ));
-                })
-                .orElseGet(() -> {
-                    log.warn("Invalid refresh token provided");
-                    return ResponseEntity.status(401).body(Map.of("error", "Invalid refresh token"));
-                });
+        log.info("Access token refreshed successfully");
+        return ResponseEntity.ok(ApiResponse.success("Token refreshed", authResponse));
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logout(HttpServletRequest request, HttpServletResponse response) {
-        Optional<String> refreshTokenOpt = Optional.ofNullable(request.getCookies())
-                .flatMap(cookies -> Arrays.stream(cookies)
-                        .filter(c -> "refreshToken".equals(c.getName()))
-                        .map(Cookie::getValue)
-                        .findFirst());
+    public ResponseEntity<ApiResponse<Void>> logout(
+            HttpServletRequest request, HttpServletResponse response) {
 
-        refreshTokenOpt.ifPresent(token -> {
-            refreshTokenService.deleteByToken(token);
-            log.info("Refresh token invalidated on logout");
-        });
+        CookieUtil.getRefreshTokenFromCookies(request)
+                .ifPresent(authService::logout);
 
-        Cookie clearedCookie = new Cookie("refreshToken", null);
-        clearedCookie.setMaxAge(0);
-        clearedCookie.setPath("/");
-        response.addCookie(clearedCookie);
+        CookieUtil.clearRefreshTokenCookie(response);
+        log.info("User logged out successfully");
 
-        log.info("User successfully logged out");
-        return ResponseEntity.ok(Map.of("message", "Successfully logged out"));
+        return ResponseEntity.ok(ApiResponse.success("Successfully logged out"));
     }
 }
+
+
+
