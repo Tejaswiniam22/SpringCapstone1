@@ -1,5 +1,7 @@
 package com.project.demo.service;
 
+import com.project.demo.exception.RefreshTokenExpiredException;
+import com.project.demo.exception.ResourceNotFoundException;
 import com.project.demo.model.RefreshToken;
 import com.project.demo.repository.RefreshTokenRepository;
 import com.project.demo.repository.UserRepository;
@@ -32,8 +34,9 @@ public class RefreshTokenService {
     }
 
     public RefreshToken createRefreshToken(String username) {
+        // make sure the user exists — if not, throw ResourceNotFoundException
         userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         RefreshToken refreshToken = new RefreshToken();
         refreshToken.setUsername(username);
@@ -47,7 +50,7 @@ public class RefreshTokenService {
     public RefreshToken verifyExpiration(RefreshToken token) {
         if (token.getExpiryDate().compareTo(Instant.now()) < 0) {
             refreshTokenRepository.deleteByToken(token.getToken());
-            throw new RuntimeException("Refresh token was expired. Please make a new sign-in request.");
+            throw new RefreshTokenExpiredException("Refresh token was expired. Please sign in again.");
         }
         return token;
     }
